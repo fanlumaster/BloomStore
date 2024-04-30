@@ -10,13 +10,24 @@
 typedef int RC;
 #define OK 0
 #define ERR (-1)
+#define WARN 1
+#define FILE_NOT_EXISTS 2
 
 // num of hash functions that bloom filter used
 #define HASH_FUNC_NUM_USED 8
 #define BLOOM_FILTER_CELL_SIZE 1024
 #define MAX_FILENAME_LEN 50
 
+// page size, normally 4096 bytes
+#define PAGE_SIZE 4096
+#define BUFFER_SIZE 4096
+
 using HashFunction = std::function<unsigned int(std::string)>;
+
+struct KVSlice {
+    std::string key;
+    std::string value;
+};
 
 class HashFuncs {
   public:
@@ -59,20 +70,20 @@ class BloomFilter {
 
 class Log {
   public:
-    Log(const char *name);
+    Log(std::string filename);
     ~Log();
     HANDLE GetHandle();
 
   private:
     HANDLE handle;
-    char DBName[MAX_FILENAME_LEN];
+    std::string DBName;
     RC _file_exists();
 };
 
 // one explicit instance
 class BloomStoreInstance {
   public:
-    BloomStoreInstance(const char *filename); // one instance corresponds to one db file in flash store
+    BloomStoreInstance(std::string filename); // one instance corresponds to one db file in flash store
     ~BloomStoreInstance();
     RC InsertData(const char *key, const char *value); // insert a KV pair to database
     RC FindData(const char *key);                      // find a KV pair by key
