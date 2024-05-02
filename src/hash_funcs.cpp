@@ -4,6 +4,45 @@ HashFuncs::HashFuncs(void) {}
 
 HashFuncs::~HashFuncs() {}
 
+// achieve the partition with evenly distribution and disjoin keys
+unsigned int HashFuncs::Hash(std::string str, int instanceNum) {
+    unsigned int seed = 131;
+    unsigned int hash = 0;
+    for (char c : str) {
+        hash = hash * seed + c;
+    }
+    return (hash % instanceNum);
+}
+
+unsigned int HashFuncs::HashValue(std::string str, int index) {
+    switch (index) {
+    case 0:
+        return this->RSHash(str);
+    case 1:
+        return this->JSHash(str);
+    case 2:
+        return this->PJWHash(str);
+    case 3:
+        return this->ELFHash(str);
+    case 4:
+        return this->BKDRHash(str);
+    case 5:
+        return this->SDBMHash(str);
+    case 6:
+        return this->DJBHash(str);
+    case 7:
+        return this->DEKHash(str);
+    case 8:
+        return this->BPHash(str);
+    case 9:
+        return this->FNVHash(str);
+    case 10:
+        return this->APHash(str);
+    default:
+        return ERR;
+    }
+}
+
 unsigned int HashFuncs::RSHash(std::string str) {
     unsigned int b = 378551;
     unsigned int a = 63689;

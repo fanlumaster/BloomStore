@@ -1,6 +1,7 @@
 #include "bloom_store.h"
 
-BloomFilter::BloomFilter() : cellNum(BLOOM_FILTER_CELL_SIZE), bloomCell(std::vector<bool>(BLOOM_FILTER_CELL_SIZE, false)), hashFunctions() {
+BloomFilter::BloomFilter() : cellNum(BLOOM_CELL_NUM), hashFunctions() {
+    bloomCell.reset();
     // default hash functions that will be used
     hashFunctions.push_back(HashFuncs::RSHash);
     hashFunctions.push_back(HashFuncs::JSHash);
@@ -12,22 +13,42 @@ BloomFilter::BloomFilter() : cellNum(BLOOM_FILTER_CELL_SIZE), bloomCell(std::vec
     hashFunctions.push_back(HashFuncs::DEKHash);
 }
 
-BloomFilter::BloomFilter(unsigned int num, std::vector<HashFunction> funcs) : cellNum(num), bloomCell(num), hashFunctions(funcs) {}
+BloomFilter::BloomFilter(std::vector<HashFunction> funcs) : cellNum(BLOOM_CELL_NUM), hashFunctions(funcs) { bloomCell.reset(); }
 
 BloomFilter::~BloomFilter() {}
 
 RC BloomFilter::InsertData(std::string str) {
     for (auto const &func : hashFunctions) {
-        bloomCell[func(str) % cellNum] = true;
+        bloomCell.set(func(str) % cellNum);
+    }
+    return OK;
+}
+
+RC BloomFilter::InsertData(std::string str, std::bitset<BLOOM_CELL_NUM> cell) {
+    for (auto const &func : hashFunctions) {
+        cell.set(func(str) % cellNum);
     }
     return OK;
 }
 
 bool BloomFilter::IsContain(std::string str) {
     for (auto const &func : hashFunctions) {
-        if (bloomCell[func(str) % cellNum] == false) {
+        if (!bloomCell[func(str) % cellNum]) {
             return false;
         }
     }
     return true;
 }
+
+bool BloomFilter::IsContain(std::string str, std::bitset<BLOOM_CELL_NUM> cell) {
+    for (auto const &func : hashFunctions) {
+        if (!cell[func(str) % cellNum]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int BloomFilter::getHashFuncNum() { return hashFunctions.size(); }
+
+std::vector<HashFunction> &BloomFilter::getHashFunctions() { return hashFunctions; }
