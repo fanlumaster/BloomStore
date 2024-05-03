@@ -1,4 +1,5 @@
 #include "bloom_store.h"
+#include <fileapi.h>
 
 BloomStoreInstance::BloomStoreInstance(HANDLE _handle, HANDLE _BFChainHandle) {
     fileHandle = _handle;
@@ -17,24 +18,6 @@ BloomStoreInstance::~BloomStoreInstance() {
     delete activeBF;
     delete[] buffer;
     delete activeBFBuffer;
-}
-
-// 前提：已经定位到这个 instance 中来了
-RC BloomStoreInstance::InsertData(struct KVPair *kv) {
-    std::string key = kv->key;
-    // TODO: 先在 activeBF 中进行查找， bloom filter func before insert, 如果没找到，那就直接插入，如果找到了，那么，找到那个位置，进行替换
-    bool founded = activeBF->IsContain(key);
-
-    if (!founded) {
-        // 继续在 flash 中的 BF Chain 中查找
-    } else {
-        // 在 active BF 中找到了，那么，尝试在 Write Buffer 中查找
-        // TODO: try to find in write buf
-        bool foundedInWriteBuffer = true;
-
-        // not found
-    }
-    return OK;
 }
 
 bool BloomStoreInstance::LookupKeyInActiveBF(std::string key) { return activeBF->IsContain(key); }
@@ -153,7 +136,7 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
             if (strcmp(key.c_str(), newKv->key) == 0) {
                 memcpy(value, newKv->value, VSIZE);
                 delete newKv;
-                return OK;
+                return KEY_FOUND_IN_RAM;
             }
         }
     }
@@ -168,8 +151,7 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
     if (!inBFChain) {
         return KEY_NOT_FOUND;
     }
-    // (7)
-    // 对于BF链中找到键的每个BF，将提取一个flash指针并跟随以搜索其对应的包含KV对的flash页面；如果需要搜索多个flash页面，则BloomStore将根据它们的写入时间的相反顺序（从最大BF标签）搜索页面；然后，在找到第一个与搜索的键匹配的KV对时，BloomStore停止其查找并肯定返回。
+    // (7) 对于BF链中找到键的每个BF，将提取一个flash指针并跟随以搜索其对应的包含KV对的flash页面；如果需要搜索多个flash页面，则BloomStore将根据它们的写入时间的相反顺序（从最大BF标签）搜索页面；然后，在找到第一个与搜索的键匹配的KV对时，BloomStore停止其查找并肯定返回。
     std::reverse(bfChainFoundedIndexVec.begin(), bfChainFoundedIndexVec.end());
     for (int i = 0; i < bfChainFoundedIndexVec.size(); i++) {
         unsigned int curFlashPageIndex = bfChainFoundedIndexVec[i].second;
@@ -179,7 +161,7 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
             if (strcmp(newKv->value, key.c_str())) {
                 memcpy(value, newKv->value, VSIZE);
                 delete newKv;
-                return OK;
+                return KEY_FOUND_IN_FALSH;
             }
         }
     }
@@ -187,4 +169,122 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
     // (9) 如果未找到键，则查找操作返回否定值
     delete newKv;
     return KEY_NOT_FOUND;
+}
+
+bool writeKVPairStructToFile(HANDLE hFile, KVPair &data) {
+    // move file pointer to the end of file
+    LARGE_INTEGER moveOffset;
+    moveOffset.QuadPart = 0;
+    if (!SetFilePointerEx(hFile, moveOffset, NULL, FILE_END)) {
+        CloseHandle(hFile);
+        return false;
+    }
+
+    // write bytes to file
+    DWORD bytesWritten;
+    if (!WriteFile(hFile, &data, sizeof(data), &bytesWritten, NULL)) {
+        CloseHandle(hFile);
+        return false;
+    }
+    return true;
+}
+
+bool readBytesFromFile(HANDLE hFile, unsigned int offset, int bufferSize, char *data) {
+    // move file pointer to the end of file
+    LARGE_INTEGER moveOffset;
+    moveOffset.QuadPart = 0 + bufferSize * offset; // set file pointer
+    if (!SetFilePointerEx(hFile, moveOffset, NULL, FILE_BEGIN)) {
+        CloseHandle(hFile);
+        return false;
+    }
+
+    // read file content
+    DWORD bytesRead;
+    if (!ReadFile(hFile, data, bufferSize, &bytesRead, NULL)) {
+        CloseHandle(hFile);
+        return false;
+    }
+    return true;
+}
+
+bool writeBytesToFile(HANDLE hFile, char *data, int bufferSize) {
+    // move file pointer to the end of file
+    LARGE_INTEGER moveOffset;
+    moveOffset.QuadPart = 0;
+    if (!SetFilePointerEx(hFile, moveOffset, NULL, FILE_END)) {
+        CloseHandle(hFile);
+        return false;
+    }
+
+    // write bytes to file
+    DWORD bytesWritten;
+    if (!WriteFile(hFile, data, bufferSize, &bytesWritten, NULL)) {
+        CloseHandle(hFile);
+        return false;
+    }
+    return true;
+}
+
+// 前提：已经定位到这个 instance 中来了
+RC BloomStoreInstance::InsertData(struct KVPair *kv) {
+    std::string key = kv->key;
+    std::string valueToInsert = kv->value;
+    // TODO: 先在 activeBF 中进行查找， bloom filter func before insert, 如果没找到，那就直接插入，如果找到了，那么，找到那个位置，进行替换
+    char value[VSIZE];
+    struct KVPair *kvHelper;
+    kvHelper = new struct KVPair;
+    int kvPairBufferSize = sizeof(struct KVPair);
+    RC lookupRc = LookupData(key, value);
+    // if founded in RAM
+    if (lookupRc == KEY_FOUND_IN_RAM) {
+        if (strcmp(value, kv->value) == 0) {
+            return OK;
+        }
+        // update KV Pair in the RAM
+        for (int i = 0; i < bufferNum; i++) {
+            kvHelper = reinterpret_cast<KVPair *>(buffer[kvPairBufferSize * i]);
+            // (4) 如果在写缓冲区中找到键，则键查找操作返回肯定值
+            if (strcmp(key.c_str(), kvHelper->key) == 0) {
+                memcpy(kvHelper, kv, kvPairBufferSize);
+                delete kvHelper;
+                return OK;
+            }
+        }
+    }
+
+    if (lookupRc == KEY_FOUND_IN_FALSH) {
+        if (strcmp(value, kv->value) == 0) {
+            return OK;
+        }
+    }
+
+    // update/insert
+
+    // if current buffer is full, then write the buffer to the flash
+    if (bufferNum == BUFFER_NUM) {
+        int kvPairFileSize = GetFileSize(fileHandle, NULL);
+        // 1. write the KVPair page buffer
+        writeBytesToFile(fileHandle, buffer, BUFFER_NUM * kvPairSize);
+        // 2. write the BFChain buffer
+        // 2.1 build current activeBFBuffer
+        activeBFBuffer->pageIndexInFlash = kvPairFileSize;
+        std::string curBloomCell = activeBF->getBloomCell().to_string();
+        std::copy(curBloomCell.begin(), curBloomCell.end(), activeBFBuffer->bloomCell);
+        // 2.2
+        int bfFileSize = GetFileSize(BFChainHandle, NULL);
+        int oneBufferSize = sizeof(BloomFilterBuffer);
+        std::vector<BloomFilterBuffer> bfVec(BFChainCnt);
+        /* struct BloomFilterBuffer *tmpData = new struct BloomFilterBuffer; */
+        char tmpData[sizeof(struct BloomFilterBuffer)];
+        for (int i = BFChainStartIndex, j = 0; i < BFChainStartIndex + BFChainCnt; i++, j++) {
+            readBytesFromFile(BFChainHandle, i * oneBufferSize, oneBufferSize, tmpData);
+            writeBytesToFile(BFChainHandle, tmpData, oneBufferSize);
+        }
+        writeBytesToFile(BFChainHandle, (char *)activeBFBuffer, oneBufferSize);
+        // 2.3 update some RAM variables
+        bufferNum = 0;
+        BFChainStartIndex = bfFileSize;
+        BFChainCnt += 1;
+    }
+    return OK;
 }

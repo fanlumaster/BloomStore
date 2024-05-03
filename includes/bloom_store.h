@@ -17,6 +17,8 @@ typedef int RC;
 #define WARN 1
 #define FILE_NOT_EXISTS 2
 #define FILE_RELATED_ERR 3
+#define KEY_FOUND_IN_RAM 4
+#define KEY_FOUND_IN_FALSH 5
 
 // num of hash functions that bloom filter used
 #define HASH_FUNC_NUM_USED 8
@@ -26,7 +28,7 @@ typedef int RC;
 // page size, normally 4096 bytes
 #define PAGE_SIZE 4096
 #define BUFFER_SIZE 4096
-#define BUFFER_NUM 4096
+#define BUFFER_NUM 512 // one flash page stores BUFFER_NUM KV Pairs
 
 #define BLOOM_CELL_NUM 1024
 
@@ -34,6 +36,8 @@ typedef int RC;
 #define VSIZE 50
 
 #define MAX_BF_COUNT 1000
+
+#define INSTANCE_NUM 10 // nums of instances that will be initialized
 
 enum OpType { ADD_DATA, DELETE_DATA };
 
@@ -91,6 +95,7 @@ class BloomFilter {
     bool IsContain(std::string str, std::bitset<BLOOM_CELL_NUM> cell);
     int getHashFuncNum();
     std::vector<HashFunction> &getHashFunctions();
+    std::bitset<BLOOM_CELL_NUM> &getBloomCell();
 
   private:
     unsigned int cellNum;

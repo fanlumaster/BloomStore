@@ -52,3 +52,8 @@ bool BloomFilter::IsContain(std::string str, std::bitset<BLOOM_CELL_NUM> cell) {
 int BloomFilter::getHashFuncNum() { return hashFunctions.size(); }
 
 std::vector<HashFunction> &BloomFilter::getHashFunctions() { return hashFunctions; }
+
+
+std::bitset<BLOOM_CELL_NUM> & BloomFilter::getBloomCell(){
+    return bloomCell;
+}
