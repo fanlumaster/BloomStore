@@ -19,7 +19,8 @@ BloomFilter::~BloomFilter() {}
 
 RC BloomFilter::InsertData(std::string str) {
     for (auto const &func : hashFunctions) {
-        bloomCell.set(func(str) % cellNum);
+        int curIndex = func(str) % cellNum;
+        bloomCell.set(curIndex);
     }
     return OK;
 }
@@ -33,7 +34,8 @@ RC BloomFilter::InsertData(std::string str, std::bitset<BLOOM_CELL_NUM> cell) {
 
 bool BloomFilter::IsContain(std::string str) {
     for (auto const &func : hashFunctions) {
-        if (!bloomCell[func(str) % cellNum]) {
+        int curIndex = func(str) % cellNum;
+        if (!bloomCell[curIndex]) {
             return false;
         }
     }

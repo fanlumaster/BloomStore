@@ -1,11 +1,22 @@
 #include "bloom_store.h"
 
+BloomStore::BloomStore() {
+    instanceNum = 6; // default instance num
+    for (int _i = 0; _i < instanceNum; _i++) {
+        BloomStoreInstance *curInstance = new BloomStoreInstance(log->GetHandle(), BFChainLog->GetHandle());
+        BloomStoreInstanceVec.push_back(curInstance);
+    }
+    emptyKVPairNumTotal = 0;
+    allKVPairNumsTotal = 0;
+}
+
 BloomStore::BloomStore(std::string filename, std::string BFChainLogFilename) {
     log = new Log(filename);
     BFChainLog = new Log(BFChainLogFilename);
     instanceNum = 6; // default instance num
     for (int _i = 0; _i < instanceNum; _i++) {
-        BloomStoreInstanceVec.push_back(BloomStoreInstance(log->GetHandle(), BFChainLog->GetHandle()));
+        BloomStoreInstance *curInstance = new BloomStoreInstance(log->GetHandle(), BFChainLog->GetHandle());
+        BloomStoreInstanceVec.push_back(curInstance);
     }
     emptyKVPairNumTotal = 0;
     allKVPairNumsTotal = 0;
@@ -14,12 +25,24 @@ BloomStore::BloomStore(std::string filename, std::string BFChainLogFilename) {
 BloomStore::~BloomStore() {
     delete log;
     delete BFChainLog;
+    for (int _i = 0; _i < instanceNum; _i++) {
+        delete BloomStoreInstanceVec[_i];
+    }
+}
+
+RC BloomStore::LookupData(std::string key, char *value) {
+    unsigned int curInstanceIndex = HashFuncs::Hash(key, instanceNum);
+    BloomStoreInstance *curInstance = BloomStoreInstanceVec[curInstanceIndex];
+    if (KEY_FOUND_IN_RAM == curInstance->LookupData(key, value) || KEY_FOUND_IN_FLASH == curInstance->LookupData(key, value)) {
+        return OK;
+    }
+    return KEY_NOT_FOUND; 
 }
 
 RC BloomStore::InsertData(struct KVPair *kv) {
     unsigned int curInstanceIndex = HashFuncs::Hash(std::string(kv->key), instanceNum);
-    BloomStoreInstance curInstance = BloomStoreInstanceVec[curInstanceIndex];
-    curInstance.InsertData(kv);
+    BloomStoreInstance *curInstance = BloomStoreInstanceVec[curInstanceIndex];
+    curInstance->InsertData(kv);
     return OK;
 }
 
@@ -61,6 +84,5 @@ bool BloomStore::removeFirstBytes(const char *inputFileName, int bytesToRemove) 
         return false;
     }
 
-    /* std::cout << "input file has already benn overwritten." << std::endl; */
     return true;
 }

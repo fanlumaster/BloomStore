@@ -8,6 +8,7 @@
 #include <bitset>
 #include <execution>
 #include <algorithm>
+#include <iostream>
 
 // return code
 typedef int RC;
@@ -18,7 +19,7 @@ typedef int RC;
 #define FILE_NOT_EXISTS 2
 #define FILE_RELATED_ERR 3
 #define KEY_FOUND_IN_RAM 4
-#define KEY_FOUND_IN_FALSH 5
+#define KEY_FOUND_IN_FLASH 5
 
 // num of hash functions that bloom filter used
 #define HASH_FUNC_NUM_USED 8
@@ -48,8 +49,8 @@ struct KVPair {
     char key[KSIZE];
     /* std::string value; */
     char value[VSIZE];
-    int indexNum; // index among all KVPairs in one page
-    int op;
+    /* int indexNum; // index among all KVPairs in one page */
+    /* int op; */
 };
 
 struct BloomFilterBuffer {
@@ -118,6 +119,7 @@ class Log {
 // one explicit instance
 class BloomStoreInstance {
   public:
+    BloomStoreInstance(); 
     BloomStoreInstance(HANDLE _handle, HANDLE _BFChainHandle); // one instance corresponds to one db file in flash store
     ~BloomStoreInstance();
     RC InsertData(struct KVPair *kv);            // insert a KV pair to database
@@ -130,7 +132,8 @@ class BloomStoreInstance {
     HANDLE BFChainHandle;
     int kvPairSize;                           // size of one KV Pair
     BloomFilter *activeBF;                    // actiave BF
-    char *buffer;                             // Write Buffer
+    /* char *buffer;                             // Write Buffer */
+    char buffer[BUFFER_NUM * sizeof(KVPair)] = {};                             // Write Buffer
     int bufferNum;                            // count of KVPair in write buffer
     struct BloomFilterBuffer *activeBFBuffer; // current active BF in the RAM
     int pageSize;                             // flash page size
@@ -145,10 +148,11 @@ class BloomStoreInstance {
 
 class BloomStore {
   public:
+    BloomStore();
     BloomStore(std::string filename, std::string BFChainLogFilename);
     ~BloomStore();
     RC InsertData(struct KVPair *kv);
-    RC LookupData(std::string key); // find a KV pair by key
+    RC LookupData(std::string key, char* value); // find a KV pair by key
     RC DeleteData(std::string key);
     bool removeFirstBytes(const char *inputFileName, int bytesToRemove);
 
@@ -156,7 +160,7 @@ class BloomStore {
     Log *log; // flash store, the rest BF chain and KV chain are both in file
     Log *BFChainLog;
     int instanceNum;
-    std::vector<BloomStoreInstance> BloomStoreInstanceVec;
+    std::vector<BloomStoreInstance*> BloomStoreInstanceVec;
     int emptyKVPairNumTotal; // all instances
     int allKVPairNumsTotal;  // all instances
 };

@@ -1,22 +1,33 @@
 #include "bloom_store.h"
 #include <fileapi.h>
 
-BloomStoreInstance::BloomStoreInstance(HANDLE _handle, HANDLE _BFChainHandle) {
-    fileHandle = _handle;
-    BFChainHandle = _BFChainHandle;
+BloomStoreInstance::BloomStoreInstance() {
     kvPairSize = sizeof(struct KVPair);
     activeBF = new BloomFilter();
-    buffer = new char[BUFFER_NUM * kvPairSize];
+    /* buffer = new char[BUFFER_NUM * kvPairSize]; */
     bufferNum = 0;
     activeBFBuffer = new struct BloomFilterBuffer;
     emptyKVPairNum = 0;
     allKVPairNums = 0;
     BFChainStartIndex = -1; // default is -1, means not exist yet
+    BFChainCnt = 0;
+}
+
+BloomStoreInstance::BloomStoreInstance(HANDLE _handle, HANDLE _BFChainHandle) {
+    fileHandle = _handle;
+    BFChainHandle = _BFChainHandle;
+    kvPairSize = sizeof(struct KVPair);
+    activeBF = new BloomFilter();
+    bufferNum = 0;
+    activeBFBuffer = new struct BloomFilterBuffer;
+    emptyKVPairNum = 0;
+    allKVPairNums = 0;
+    BFChainStartIndex = -1; // default is -1, means not exist yet
+    BFChainCnt = 0;
 }
 
 BloomStoreInstance::~BloomStoreInstance() {
     delete activeBF;
-    delete[] buffer;
     delete activeBFBuffer;
 }
 
@@ -26,7 +37,7 @@ RC BloomStoreInstance::RetriveBFChainFromFlash() { return OK; }
 
 // read No.offset data of BloomFilterBuffer struct
 RC readStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, std::vector<BloomFilterBuffer> &bfVec, int vecIndex) {
-    char buffer[bufferSize];
+    char buffer[sizeof(BloomFilterBuffer)];
     // move file cursor to needed position
     LARGE_INTEGER moveOffset;
     moveOffset.QuadPart = 0 + bufferSize * offset; // 设置为你想要读取的起始位置
@@ -50,7 +61,7 @@ RC readStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, std::ve
 
 // read No.offset data of KVPair struct
 RC readKVPairStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, struct KVPair *kvPair) {
-    char buffer[bufferSize];
+    char buffer[sizeof(KVPair)];
     // move file cursor to needed position
     LARGE_INTEGER moveOffset;
     moveOffset.QuadPart = 0 + bufferSize * offset; // set file pointer
@@ -73,7 +84,7 @@ RC readKVPairStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, s
 }
 
 // retrive every bit that corresponds to current hash value index
-std::string retriveAllHorizontalBits(int hashFuncIndex, std::vector<BloomFilterBuffer> &bfVec, std::vector<HashFunction> &hashFunctions, std::string &key) {
+std::string retriveAllHorizontalBits(int hashFuncIndex, std::vector<BloomFilterBuffer> &bfVec, std::vector<HashFunction> &hashFunctions, std::string &key, const std::string &str) {
     int curIndex = hashFunctions[hashFuncIndex](key);
     std::string res = "";
     for (int i = 0; i < bfVec.size(); i++) {
@@ -95,7 +106,7 @@ std::vector<std::pair<int, unsigned int>> BloomStoreInstance::LookupKeyInRestBFC
     std::vector<std::string> bfHorizontalData(activeBF->getHashFuncNum());
     int hashFuncIndex = 0;
     std::vector<HashFunction> &curHashFuncs = activeBF->getHashFunctions();
-    std::transform(std::execution::par, bfHorizontalData.begin(), bfHorizontalData.end(), bfHorizontalData.begin(), [&hashFuncIndex, &bfVec, &curHashFuncs, &key]() { return retriveAllHorizontalBits(hashFuncIndex++, bfVec, curHashFuncs, key); });
+    std::transform(std::execution::par, bfHorizontalData.begin(), bfHorizontalData.end(), bfHorizontalData.begin(), [&hashFuncIndex, &bfVec, &curHashFuncs, &key](const std::string &str) { return retriveAllHorizontalBits(hashFuncIndex++, bfVec, curHashFuncs, key, str); });
     std::bitset<MAX_BF_COUNT> bitRes;
     for (int i = 0; i < bfVec.size(); i++) {
         bitRes.set(i);
@@ -131,11 +142,11 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
     // (3) 如果在活动BF中找到键，则继续在KV对写缓冲区中检查键
     if (inActiveBF) {
         for (int i = 0; i < bufferNum; i++) {
-            newKv = reinterpret_cast<KVPair *>(buffer[kvPairBufferSize * i]);
+            // newKv = reinterpret_cast<KVPair *>(buffer[kvPairBufferSize * i]);
+            struct KVPair *curKv = reinterpret_cast<KVPair *>(buffer + kvPairBufferSize * i);
             // (4) 如果在写缓冲区中找到键，则键查找操作返回肯定值
-            if (strcmp(key.c_str(), newKv->key) == 0) {
-                memcpy(value, newKv->value, VSIZE);
-                delete newKv;
+            if (strcmp(key.c_str(), curKv->key) == 0) {
+                memcpy(value, curKv->value, VSIZE);
                 return KEY_FOUND_IN_RAM;
             }
         }
@@ -161,7 +172,7 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
             if (strcmp(newKv->value, key.c_str())) {
                 memcpy(value, newKv->value, VSIZE);
                 delete newKv;
-                return KEY_FOUND_IN_FALSH;
+                return KEY_FOUND_IN_FLASH;
             }
         }
     }
@@ -235,6 +246,7 @@ RC BloomStoreInstance::InsertData(struct KVPair *kv) {
     kvHelper = new struct KVPair;
     int kvPairBufferSize = sizeof(struct KVPair);
     RC lookupRc = LookupData(key, value);
+    activeBF->InsertData(key);
     // if founded in RAM
     if (lookupRc == KEY_FOUND_IN_RAM) {
         if (strcmp(value, kv->value) == 0) {
@@ -243,22 +255,23 @@ RC BloomStoreInstance::InsertData(struct KVPair *kv) {
         // update KV Pair in the RAM
         for (int i = 0; i < bufferNum; i++) {
             kvHelper = reinterpret_cast<KVPair *>(buffer[kvPairBufferSize * i]);
-            // (4) 如果在写缓冲区中找到键，则键查找操作返回肯定值
             if (strcmp(key.c_str(), kvHelper->key) == 0) {
-                memcpy(kvHelper, kv, kvPairBufferSize);
+                memcpy(buffer + (kvPairBufferSize * i), kv, kvPairBufferSize);
                 delete kvHelper;
                 return OK;
             }
         }
     }
 
-    if (lookupRc == KEY_FOUND_IN_FALSH) {
+    if (lookupRc == KEY_FOUND_IN_FLASH) {
         if (strcmp(value, kv->value) == 0) {
             return OK;
         }
     }
 
     // update/insert
+    memcpy(buffer + (kvPairBufferSize * bufferNum), kv, kvPairBufferSize);
+    bufferNum += 1;
 
     // if current buffer is full, then write the buffer to the flash
     if (bufferNum == BUFFER_NUM) {
