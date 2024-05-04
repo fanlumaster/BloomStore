@@ -36,11 +36,11 @@ bool BloomStoreInstance::LookupKeyInActiveBF(std::string key) { return activeBF-
 RC BloomStoreInstance::RetriveBFChainFromFlash() { return OK; }
 
 // read No.offset data of BloomFilterBuffer struct
-RC readStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, std::vector<BloomFilterBuffer> &bfVec, int vecIndex) {
+RC readStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, std::vector<BloomFilterBuffer*> &bfVec, int vecIndex) {
     char buffer[sizeof(BloomFilterBuffer)];
     // move file cursor to needed position
     LARGE_INTEGER moveOffset;
-    moveOffset.QuadPart = 0 + bufferSize * offset; // 设置为你想要读取的起始位置
+    moveOffset.QuadPart = 0 + offset; // set the offset, the unit is byte
     if (!SetFilePointerEx(hFile, moveOffset, NULL, FILE_BEGIN)) {
         CloseHandle(hFile);
         return FILE_RELATED_ERR;
@@ -55,7 +55,9 @@ RC readStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, std::ve
 
     // convert bytes to struct
     BloomFilterBuffer *myData = reinterpret_cast<BloomFilterBuffer *>(buffer);
-    bfVec[vecIndex] = *myData;
+    bfVec[vecIndex] = new BloomFilterBuffer;
+    bfVec[vecIndex]->pageIndexInFlash = myData->pageIndexInFlash;
+    memcpy(bfVec[vecIndex]->bloomCell, myData->bloomCell, sizeof(BloomFilterBuffer));
     return OK;
 }
 
@@ -64,7 +66,7 @@ RC readKVPairStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, s
     char buffer[sizeof(KVPair)];
     // move file cursor to needed position
     LARGE_INTEGER moveOffset;
-    moveOffset.QuadPart = 0 + bufferSize * offset; // set file pointer
+    moveOffset.QuadPart = 0 + offset; // set file pointer
     if (!SetFilePointerEx(hFile, moveOffset, NULL, FILE_BEGIN)) {
         CloseHandle(hFile);
         return FILE_RELATED_ERR;
@@ -79,16 +81,17 @@ RC readKVPairStructFromFile(HANDLE hFile, unsigned int offset, int bufferSize, s
 
     // convert bytes to struct
     KVPair *myData = reinterpret_cast<KVPair *>(buffer);
-    *kvPair = *myData;
+    memcpy(kvPair->key, myData->key, KSIZE);
+    memcpy(kvPair->value, myData->value, VSIZE);
     return OK;
 }
 
 // retrive every bit that corresponds to current hash value index
-std::string retriveAllHorizontalBits(int hashFuncIndex, std::vector<BloomFilterBuffer> &bfVec, std::vector<HashFunction> &hashFunctions, std::string &key, const std::string &str) {
-    int curIndex = hashFunctions[hashFuncIndex](key);
+std::string retriveAllHorizontalBits(int hashFuncIndex, std::vector<BloomFilterBuffer *> &bfVec, std::vector<HashFunction> &hashFunctions, std::string &key, const std::string &str) {
+    int curIndex = hashFunctions[hashFuncIndex](key) % BLOOM_FILTER_CELL_SIZE;
     std::string res = "";
     for (int i = 0; i < bfVec.size(); i++) {
-        res += bfVec[i].bloomCell[curIndex];
+        res += bfVec[i]->bloomCell[BLOOM_FILTER_CELL_SIZE - 1 - curIndex]; // take care the index here! bitset take the index from right to left
     }
     return res;
 }
@@ -96,12 +99,14 @@ std::string retriveAllHorizontalBits(int hashFuncIndex, std::vector<BloomFilterB
 // parallel look up in the left BF chain
 // return: all the founded BF index and its corresponding BloomFilterBuffer's pageIndexInFlash
 std::vector<std::pair<int, unsigned int>> BloomStoreInstance::LookupKeyInRestBFChain(std::string key) {
-    // 1. 取出 flash 中的 BFChain 到 vector 中
+    // 1. retrive BFChain in flash BFChain to vector
     int oneBufferSize = sizeof(BloomFilterBuffer);
-    std::vector<BloomFilterBuffer> bfVec(BFChainCnt);
-    for (int i = BFChainStartIndex, j = 0; i < BFChainStartIndex + BFChainCnt; i++, j++) {
-        readStructFromFile(BFChainHandle, i * oneBufferSize, oneBufferSize, bfVec, j);
+    std::vector<BloomFilterBuffer*> bfVec(BFChainCnt);
+    for (int j = 0; j < BFChainCnt; j++) {
+        readStructFromFile(BFChainHandle, BFChainStartIndex + j * oneBufferSize, oneBufferSize, bfVec, j);
+        // std::string fanywhat = bfVec[j]->bloomCell
     }
+    
     // 并行进行判断
     std::vector<std::string> bfHorizontalData(activeBF->getHashFuncNum());
     int hashFuncIndex = 0;
@@ -118,16 +123,16 @@ std::vector<std::pair<int, unsigned int>> BloomStoreInstance::LookupKeyInRestBFC
     std::vector<std::pair<int, unsigned int>> foundedIndexVec;
     for (int i = 0; i < bfHorizontalData.size(); i++) {
         if (bitRes[i]) {
-            foundedIndexVec.push_back(std::make_pair(i, bfVec[i].pageIndexInFlash));
+            foundedIndexVec.push_back(std::make_pair(i, bfVec[i]->pageIndexInFlash));
         }
     }
     return foundedIndexVec;
 }
 
 RC BloomStoreInstance::LookupData(std::string key, char *value) {
-    // (1) 在活动BF中查找键
+    // (1) look up key in the active BF
     bool inActiveBF = LookupKeyInActiveBF(key);
-    // (2) 如果在活动BF中未找到键，则遵循RAM中的flash指针以检索BF链的其余部分，并执行BF的并行查找
+    // (2) if not found key in active BF，则遵循RAM中的flash指针以检索BF链的其余部分，并执行BF的并行查找
     bool inBFChain = false;
     std::vector<std::pair<int, unsigned int>> bfChainFoundedIndexVec;
     /* if (!inActiveBF && BFChainStartIndex >= 0) { */
@@ -168,17 +173,15 @@ RC BloomStoreInstance::LookupData(std::string key, char *value) {
         unsigned int curFlashPageIndex = bfChainFoundedIndexVec[i].second;
         int kvPairBufferSize = sizeof(struct KVPair);
         for (unsigned int j = 0; j < BUFFER_NUM; j++) {
-            readKVPairStructFromFile(fileHandle, (curFlashPageIndex + j) * kvPairBufferSize, kvPairBufferSize, newKv);
-            if (strcmp(newKv->value, key.c_str())) {
+            readKVPairStructFromFile(fileHandle, curFlashPageIndex + j * kvPairBufferSize, kvPairBufferSize, newKv);
+            if (strcmp(newKv->key, key.c_str()) == 0) {
                 memcpy(value, newKv->value, VSIZE);
-                delete newKv;
                 return KEY_FOUND_IN_FLASH;
             }
         }
     }
     // (8) 如果找到键，则查找操作返回肯定值
     // (9) 如果未找到键，则查找操作返回否定值
-    delete newKv;
     return KEY_NOT_FOUND;
 }
 
@@ -203,7 +206,7 @@ bool writeKVPairStructToFile(HANDLE hFile, KVPair &data) {
 bool readBytesFromFile(HANDLE hFile, unsigned int offset, int bufferSize, char *data) {
     // move file pointer to the end of file
     LARGE_INTEGER moveOffset;
-    moveOffset.QuadPart = 0 + bufferSize * offset; // set file pointer
+    moveOffset.QuadPart = 0 + offset; // set file pointer
     if (!SetFilePointerEx(hFile, moveOffset, NULL, FILE_BEGIN)) {
         CloseHandle(hFile);
         return false;
@@ -246,6 +249,9 @@ RC BloomStoreInstance::InsertData(struct KVPair *kv) {
     kvHelper = new struct KVPair;
     int kvPairBufferSize = sizeof(struct KVPair);
     RC lookupRc = LookupData(key, value);
+    if (key == "key:99") {
+        key = "key:99";
+    }
     activeBF->InsertData(key);
     // if founded in RAM
     if (lookupRc == KEY_FOUND_IN_RAM) {
@@ -289,11 +295,18 @@ RC BloomStoreInstance::InsertData(struct KVPair *kv) {
         std::vector<BloomFilterBuffer> bfVec(BFChainCnt);
         /* struct BloomFilterBuffer *tmpData = new struct BloomFilterBuffer; */
         char tmpData[sizeof(struct BloomFilterBuffer)];
-        for (int i = BFChainStartIndex, j = 0; i < BFChainStartIndex + BFChainCnt; i++, j++) {
-            readBytesFromFile(BFChainHandle, i * oneBufferSize, oneBufferSize, tmpData);
+        for (int j = 0; j < BFChainCnt; j++) {
+            readBytesFromFile(BFChainHandle, BFChainStartIndex + j * oneBufferSize, oneBufferSize, tmpData);
             writeBytesToFile(BFChainHandle, tmpData, oneBufferSize);
         }
         writeBytesToFile(BFChainHandle, (char *)activeBFBuffer, oneBufferSize);
+
+       if (!FlushFileBuffers(BFChainHandle)) {
+            CloseHandle(BFChainHandle);
+            return 1;
+        }
+        int tmpSize =  GetFileSize(fileHandle, NULL);
+        int tmp02Size = GetFileSize(BFChainHandle, NULL);
         // 2.3 update some RAM variables
         bufferNum = 0;
         BFChainStartIndex = bfFileSize;

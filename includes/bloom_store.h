@@ -23,15 +23,17 @@ typedef int RC;
 
 // num of hash functions that bloom filter used
 #define HASH_FUNC_NUM_USED 8
-#define BLOOM_FILTER_CELL_SIZE 1024
 #define MAX_FILENAME_LEN 50
 
 // page size, normally 4096 bytes
 #define PAGE_SIZE 4096
 #define BUFFER_SIZE 4096
-#define BUFFER_NUM 512 // one flash page stores BUFFER_NUM KV Pairs
+// #define BUFFER_NUM 512 // one flash page stores BUFFER_NUM KV Pairs
+#define BUFFER_NUM 100 // one flash page stores BUFFER_NUM KV Pairs
 
-#define BLOOM_CELL_NUM 1024
+// #define BLOOM_CELL_NUM 1024
+#define BLOOM_FILTER_CELL_SIZE 4096
+#define BLOOM_CELL_NUM 4096
 
 #define KSIZE 30
 #define VSIZE 50
@@ -139,7 +141,7 @@ class BloomStoreInstance {
     int pageSize;                             // flash page size
     int emptyKVPairNum;                       // count of empty KV Pairs
     int allKVPairNums;                        // includes deleted KV Pairs
-    unsigned int BFChainStartIndex;           // start of bloom chain in the flash, maintained in RAM, means there are BFChainStartIndex * sizeof(BloomFilterBuffer) bytes before
+    int BFChainStartIndex;           // start of bloom chain in the flash, maintained in RAM, means there are BFChainStartIndex * sizeof(BloomFilterBuffer) bytes before
     unsigned int BFChainCnt;                  // count of BFs in the flash, maintained in RAM
     bool LookupKeyInActiveBF(std::string key);
     RC BloomStoreInstance::RetriveBFChainFromFlash();

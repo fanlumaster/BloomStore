@@ -5,7 +5,7 @@ Log::Log(std::string filename) {
     if (_file_exists() != OK) {
         DeleteFile(DBName.c_str());
     }
-    handle = CreateFile(DBName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    handle = CreateFile(DBName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 }
 
 Log::~Log() { CloseHandle(handle); }

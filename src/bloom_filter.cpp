@@ -6,7 +6,7 @@ BloomFilter::BloomFilter() : cellNum(BLOOM_CELL_NUM), hashFunctions() {
     hashFunctions.push_back(HashFuncs::RSHash);
     hashFunctions.push_back(HashFuncs::JSHash);
     hashFunctions.push_back(HashFuncs::PJWHash);
-    hashFunctions.push_back(HashFuncs::ELFHash);
+    // hashFunctions.push_back(HashFuncs::ELFHash);
     hashFunctions.push_back(HashFuncs::BKDRHash);
     hashFunctions.push_back(HashFuncs::SDBMHash);
     hashFunctions.push_back(HashFuncs::DJBHash);
