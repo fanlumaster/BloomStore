@@ -1,7 +1,7 @@
 #include "bloom_store.h"
 
 BloomStore::BloomStore() {
-    instanceNum = 6; // default instance num
+    instanceNum = 1000; // default instance num
     for (int _i = 0; _i < instanceNum; _i++) {
         BloomStoreInstance *curInstance = new BloomStoreInstance(log->GetHandle(), BFChainLog->GetHandle());
         BloomStoreInstanceVec.push_back(curInstance);
@@ -36,7 +36,7 @@ RC BloomStore::LookupData(std::string key, char *value) {
     if (KEY_FOUND_IN_RAM == curInstance->LookupData(key, value) || KEY_FOUND_IN_FLASH == curInstance->LookupData(key, value)) {
         return OK;
     }
-    return KEY_NOT_FOUND; 
+    return KEY_NOT_FOUND;
 }
 
 RC BloomStore::InsertData(struct KVPair *kv) {

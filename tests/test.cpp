@@ -1,7 +1,7 @@
 #include "bloom_store.h"
 #include <chrono>
 
-#define LOOP (10000)
+#define LOOP (1000000)
 
 void testInsertData() {
     std::string kvPairFileName = "kv_pair";
@@ -46,12 +46,30 @@ void testInsertMassiveData() {
         }
     }
 
+    key = "fany";
+    value = "full";
+    std::copy(key.begin(), key.end(), kvPair->key);
+    kvPair->key[key.size()] = '\0';
+    std::copy(value.begin(), value.end(), kvPair->value);
+    kvPair->value[value.size()] = '\0';
+    if (OK == bloomStore->InsertData(kvPair)) {
+        // std::cout << "insert success." << '\n';
+    }
+
     char resValue[VSIZE] = {};
-    key = "key:10";
+    key = "fany";
     if (OK == bloomStore->LookupData(key, resValue)) {
         // std::cout << "lookup success, the value is: " << '\n';
         std::cout << "lookup success, the value is: " << resValue << '\n';
     }
+    for (int i = 200; i <= 200 + 66; i++) {
+        key = "key:" + std::to_string(i);
+        if (OK == bloomStore->LookupData(key, resValue)) {
+            // std::cout << "lookup success, the value is: " << '\n';
+            std::cout << "lookup success, the value is: " << resValue << '\n';
+        }
+    }
+
     delete kvPair;
     delete bloomStore;
 }

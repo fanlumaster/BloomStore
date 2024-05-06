@@ -6,7 +6,7 @@ BloomFilter::BloomFilter() : cellNum(BLOOM_CELL_NUM), hashFunctions() {
     hashFunctions.push_back(HashFuncs::RSHash);
     hashFunctions.push_back(HashFuncs::JSHash);
     hashFunctions.push_back(HashFuncs::PJWHash);
-    // hashFunctions.push_back(HashFuncs::ELFHash);
+    // hashFunctions.push_back(HashFuncs::ELFHash); // in most cases, ELF hash is the same as PJW hash
     hashFunctions.push_back(HashFuncs::BKDRHash);
     hashFunctions.push_back(HashFuncs::SDBMHash);
     hashFunctions.push_back(HashFuncs::DJBHash);
@@ -55,7 +55,4 @@ int BloomFilter::getHashFuncNum() { return hashFunctions.size(); }
 
 std::vector<HashFunction> &BloomFilter::getHashFunctions() { return hashFunctions; }
 
-
-std::bitset<BLOOM_CELL_NUM> & BloomFilter::getBloomCell(){
-    return bloomCell;
-}
+std::bitset<BLOOM_CELL_NUM> &BloomFilter::getBloomCell() { return bloomCell; }

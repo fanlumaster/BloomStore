@@ -1,7 +1,7 @@
 #include <iostream>
 #include <windows.h>
 
-bool fileExists(const std::string& filename) {
+bool fileExists(const std::string &filename) {
     DWORD fileAttributes = GetFileAttributes(filename.c_str());
     return (fileAttributes != INVALID_FILE_ATTRIBUTES && !(fileAttributes & FILE_ATTRIBUTE_DIRECTORY));
 }
