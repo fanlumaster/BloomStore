@@ -39,7 +39,7 @@ typedef int RC;
 
 #define MAX_BF_COUNT 1000
 
-#define INSTANCE_NUM 10 // nums of instances that will be initialized
+#define INSTANCE_NUM 1000 // nums of instances that will be initialized
 
 enum OpType { ADD_DATA, DELETE_DATA };
 

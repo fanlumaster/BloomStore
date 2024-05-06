@@ -9,3 +9,4 @@ References:
 - <https://codereview.stackexchange.com/questions/179135/bloom-filter-implementation-in-c>
 - <https://github.com/Shao-Jie/SkimpyStash>
 - <https://haldir65.github.io/2018/12/02/2018-12-02-page-size-and-block-size/>
+- <https://blog.walterlv.com/post/win32-file-open-modes.html>

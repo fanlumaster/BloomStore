@@ -1,7 +1,7 @@
 #include "bloom_store.h"
 
 BloomStore::BloomStore() {
-    instanceNum = 1000; // default instance num
+    instanceNum = INSTANCE_NUM; // default instance num
     for (int _i = 0; _i < instanceNum; _i++) {
         BloomStoreInstance *curInstance = new BloomStoreInstance(log->GetHandle(), BFChainLog->GetHandle());
         BloomStoreInstanceVec.push_back(curInstance);
@@ -13,7 +13,7 @@ BloomStore::BloomStore() {
 BloomStore::BloomStore(std::string filename, std::string BFChainLogFilename) {
     log = new Log(filename);
     BFChainLog = new Log(BFChainLogFilename);
-    instanceNum = 6; // default instance num
+    instanceNum = INSTANCE_NUM; // default instance num
     for (int _i = 0; _i < instanceNum; _i++) {
         BloomStoreInstance *curInstance = new BloomStoreInstance(log->GetHandle(), BFChainLog->GetHandle());
         BloomStoreInstanceVec.push_back(curInstance);
