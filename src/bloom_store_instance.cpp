@@ -103,7 +103,7 @@ std::string retriveAllHorizontalBits(int hashFuncIndex, std::vector<BloomFilterB
     int curIndex = hashFunctions[hashFuncIndex](key) % BLOOM_FILTER_CELL_SIZE;
     std::string res = "";
     for (int i = 0; i < bfVec.size(); i++) {
-        res += bfVec[i]->bloomCell[BLOOM_FILTER_CELL_SIZE - 1 - curIndex]; // pay attention to the index here! bitset take the index from right to left
+        res = bfVec[i]->bloomCell[BLOOM_FILTER_CELL_SIZE - 1 - curIndex] + res; // pay attention to the index here! bitset take the index from right to left
     }
     return res;
 }
