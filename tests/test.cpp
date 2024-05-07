@@ -1,5 +1,4 @@
 #include "bloom_store.h"
-#include <chrono>
 
 #define LOOP (1000000)
 

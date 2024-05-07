@@ -33,7 +33,11 @@ BloomStore::~BloomStore() {
 RC BloomStore::LookupData(std::string key, char *value) {
     unsigned int curInstanceIndex = HashFuncs::Hash(key, instanceNum);
     BloomStoreInstance *curInstance = BloomStoreInstanceVec[curInstanceIndex];
-    if (KEY_FOUND_IN_RAM == curInstance->LookupData(key, value) || KEY_FOUND_IN_FLASH == curInstance->LookupData(key, value)) {
+    RC res = curInstance->LookupData(key, value);
+    if (KEY_FOUND_IN_RAM == res || KEY_FOUND_IN_FLASH == res) {
+        if (std::string(value).empty()) {
+            return KEY_NOT_FOUND;
+        }
         return OK;
     }
     return KEY_NOT_FOUND;
@@ -43,6 +47,19 @@ RC BloomStore::InsertData(struct KVPair *kv) {
     unsigned int curInstanceIndex = HashFuncs::Hash(std::string(kv->key), instanceNum);
     BloomStoreInstance *curInstance = BloomStoreInstanceVec[curInstanceIndex];
     curInstance->InsertData(kv);
+    return OK;
+}
+
+RC BloomStore::DeleteData(std::string key) {
+    unsigned int curInstanceIndex = HashFuncs::Hash(key, instanceNum);
+    BloomStoreInstance *curInstance = BloomStoreInstanceVec[curInstanceIndex];
+    KVPair *kvPair = new KVPair;
+    std::memset(kvPair->key, '\0', sizeof(kvPair->key));
+    std::memset(kvPair->value, '\0', sizeof(kvPair->value));
+    std::copy(key.begin(), key.end(), kvPair->key);
+    kvPair->key[key.size()] = '\0';
+    curInstance->InsertData(kvPair);
+    delete kvPair;
     return OK;
 }
 

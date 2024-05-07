@@ -288,10 +288,9 @@ RC BloomStoreInstance::InsertData(struct KVPair *kv) {
         }
         // 1.2 update KV Pair in the RAM
         for (int i = 0; i < bufferNum; i++) {
-            kvHelper = reinterpret_cast<KVPair *>(buffer[kvPairBufferSize * i]);
+            kvHelper = reinterpret_cast<KVPair *>(buffer + kvPairBufferSize * i);
             if (strcmp(key.c_str(), kvHelper->key) == 0) {
                 memcpy(buffer + (kvPairBufferSize * i), kv, kvPairBufferSize);
-                delete kvHelper;
                 return OK;
             }
         }

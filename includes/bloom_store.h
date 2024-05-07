@@ -28,7 +28,7 @@ typedef int RC;
 // page size, normally 4096 bytes
 #define PAGE_SIZE 4096
 #define BUFFER_SIZE 4096
-#define BUFFER_NUM 2048 // one flash page stores BUFFER_NUM KV Pairs
+#define BUFFER_NUM 512 // one flash page stores BUFFER_NUM KV Pairs
 
 // #define BLOOM_CELL_NUM 1024
 #define BLOOM_FILTER_CELL_SIZE 4096
@@ -39,7 +39,7 @@ typedef int RC;
 
 #define MAX_BF_COUNT 1000
 
-#define INSTANCE_NUM 1000 // nums of instances that will be initialized
+#define INSTANCE_NUM 100 // nums of instances that will be initialized
 
 enum OpType { ADD_DATA, DELETE_DATA };
 
